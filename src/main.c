@@ -14,20 +14,27 @@
 int main(int argc, char **argv)
 {
   buildTrie();
-  // Load config files, if any.
   rl_bind_key('\t', auto_complete);
 
-  if (read_history(".lsh_history") == 0)
-  {
-
-    lsh_loop();
-  }
+  char histpath[1024];
+  const char *home = getenv("HOME");
+  if (home)
+    snprintf(histpath, sizeof(histpath), "%s/.lsh_history", home);
   else
-  {
-    printf("History file not found");
+    snprintf(histpath, sizeof(histpath), ".lsh_history");
+
+  if(read_history(histpath) == -1){
+    FILE *histfile = fopen(histpath, "w");
+    if (histfile) {
+      fclose(histfile);
+    } else {
+      fprintf(stderr, "Warning: Could not create history file at %s\n", histpath);
+    }
   }
 
-  append_history(0, ".lsh_history");
+  lsh_loop();
+
+  write_history(histpath);
 
   return EXIT_SUCCESS;
 }

@@ -7,6 +7,11 @@
 #include <readline/history.h>
 #include "lsh.h"
 #include "trie.h"
+#define RESET "\033[0m"
+#define GREEN "\033[34m"
+#define PATH_MAX 70
+#include <unistd.h>
+#include <pwd.h>
 
 /*
   List of builtin commands, followed by their corresponding functions.
@@ -32,16 +37,12 @@ int lsh_num_builtins()
 
 int lsh_cd(char **args)
 {
-    if (args[1] == NULL)
+
+    // Use HOME if arg is "~", otherwise use the argument provided
+    char *path = (args[1] == NULL || strcmp(args[1], "~") == 0) ? getenv("HOME") : args[1];
+    if (chdir(path) != 0)
     {
-        fprintf(stderr, "lsh: expected argument to \"cd\"\n");
-    }
-    else
-    {
-        if (chdir(args[1]) != 0)
-        {
-            perror("lsh");
-        }
+        perror("lsh");
     }
     return 1;
 }
@@ -74,29 +75,38 @@ int auto_complete(int count, int key)
     char *last = strrchr(rl_line_buffer, ' ');
     char *buf = last ? last + 1 : rl_line_buffer;
 
-    printf("\n");                        // move off the current prompt line
-    int matches = searchWord(root, buf); // print suggestions, returns count
-
-    if (matches == 1)
+    if (!buf[0]) // 1st case (nothing)
     {
-        // only one match — autocomplete it
-        rl_replace_line(last_match, 0);
-        rl_point = rl_end; // move cursor to end
+        return 0;
     }
-    else
+    else if (!last && buf[0]) // 2nd case (command autocomplete)
     {
+        printf("\n");
+        int matches = searchWord(root, buf);
+        if (matches == 1)
+        {
+            // only one match — autocomplete it
+            rl_replace_line(last_match, 0);
+            rl_point = rl_end; // move cursor to end
+        }
+        int name_per_row = 4;
         for (int i = 0; i < matches; i++)
         {
-            printf("%s\n", words[i]);
+            if (i > 0 && i % name_per_row == 0)
+                printf("\n");
+            printf("%s\t", words[i]);
         }
+        printf("\n");
+        for (int i = 0; i < match_cnt; i++)
+        {
+            free(words[i]);
+        }
+        free(words);
     }
-
-    for (int i = 0; i < match_cnt; i++)
-    {
-        free(words[i]); 
+    else
+    { // 3rd case (file autocomplete)
+        return 0;
     }
-    free(words);
-
 
     rl_on_new_line(); // tell readline cursor is on a new line
     rl_redisplay();   // redraw prompt
@@ -199,18 +209,29 @@ char **lsh_split_line(char *line)
 /**
    @brief Loop getting input and executing it.
  */
+char cwd[PATH_MAX];
+char prompt[PATH_MAX + 20];
 void lsh_loop(void)
 {
+
     rl_initialize();
 
-    char *line;
     char **args;
     int status;
-
+    struct passwd *pw = getpwuid(getuid());
+    char *name = pw->pw_name;
     char *buf;
     do
     {
-        buf = readline(">> ");
+        getcwd(cwd, sizeof(cwd));
+        snprintf(prompt, sizeof(prompt),
+                 "\001" GREEN "\002%s\001" RESET "\002:\001" GREEN "\002%s\001" RESET "\002$ ",
+                 name, cwd);
+        buf = readline(prompt);
+        if (strncmp(buf, "cd", 3) == 0)
+        {
+            chdir(buf + 3);
+        }
         if (strlen(buf) > 0)
         {
             add_history(buf);
