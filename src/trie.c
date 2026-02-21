@@ -2,6 +2,7 @@
 struct dirent *dir;
 TrieNode *root;  // global
 
+
 TrieNode *createNode()
 {
     TrieNode *node = (TrieNode *)calloc(1, sizeof(TrieNode));
